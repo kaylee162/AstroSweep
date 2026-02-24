@@ -116,7 +116,17 @@ static void fillPlayfield(u16 color) {
     }
 }
 
+#define MAX_CLEAR_PER_FRAME 16
+
 static void flushClears(void) {
+    // If we have too many small clears, doing them all can exceed VBlank time.
+    // Instead, request a full redraw next frame (usually smoother).
+    if (clearCount > MAX_CLEAR_PER_FRAME) {
+        fullRedrawRequested = 1;
+        clearCount = 0;
+        return;
+    }
+
     for (int i = 0; i < clearCount; i++) {
         drawRectPlayfield(clearQueue[i].x, clearQueue[i].y,
                           clearQueue[i].w, clearQueue[i].h, BLACK);
@@ -643,11 +653,15 @@ static void drawBullets(void) {
     for (int i = 0; i < MAX_BULLETS; i++) {
         if (!bullets[i].active) continue;
 
-        // erase old (only in playfield)
-        drawRectPlayfield(bullets[i].oldx, bullets[i].oldy, bullets[i].w, bullets[i].h, BLACK);
+        // If it moved, erase old location
+        if (bullets[i].oldx != bullets[i].x || bullets[i].oldy != bullets[i].y) {
+            drawRectPlayfield(bullets[i].oldx, bullets[i].oldy,
+                              bullets[i].w, bullets[i].h, BLACK);
+        }
 
-        // draw new (only in playfield)
-        drawRectPlayfield(bullets[i].x, bullets[i].y, bullets[i].w, bullets[i].h, YELLOW);
+        // Draw new location
+        drawRectPlayfield(bullets[i].x, bullets[i].y,
+                          bullets[i].w, bullets[i].h, YELLOW);
     }
 }
 
@@ -729,11 +743,13 @@ static void drawAsteroids(void) {
     for (int i = 0; i < MAX_ASTEROIDS; i++) {
         if (!asteroids[i].active) continue;
 
-        // Erase last drawn location (only in playfield)
-        drawRectPlayfield(asteroids[i].oldx, asteroids[i].oldy,
-                          asteroids[i].size, asteroids[i].size, BLACK);
+        // If it moved, erase old location
+        if (asteroids[i].oldx != asteroids[i].x || asteroids[i].oldy != asteroids[i].y) {
+            drawRectPlayfield(asteroids[i].oldx, asteroids[i].oldy,
+                              asteroids[i].size, asteroids[i].size, BLACK);
+        }
 
-        // Draw new location (only in playfield)
+        // Draw new location
         u16 c = asteroids[i].isBomb ? MAGENTA : ((asteroids[i].hp == 2) ? BROWN : GRAY);
         drawRectPlayfield(asteroids[i].x, asteroids[i].y,
                           asteroids[i].size, asteroids[i].size, c);
