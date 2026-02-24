@@ -63,18 +63,65 @@ static void cheatFlash(void) {
     cheatFlashTimer = 10; // 10 frames
 }
 
-// Draw a rectangle only if it is fully within the gameplay area (below HUD) and on-screen.
-// This prevents bullets/asteroids from erasing HUD pixels.
+// ---------------------------------------------------------------------------
+// Clear queue: update logic NEVER draws.
+// When something deactivates (bullet/asteroid), we queue the old rect to clear
+// and then flush clears during drawGame() (which happens after waitForVBlank()).
+// ---------------------------------------------------------------------------
+#define MAX_CLEARS 64
+
+typedef struct {
+    int x, y, w, h;
+} ClearRect;
+
+static ClearRect clearQueue[MAX_CLEARS];
+static int clearCount = 0;
+
+static void queueClear(int x, int y, int w, int h) {
+    if (w <= 0 || h <= 0) return;
+
+    if (clearCount < MAX_CLEARS) {
+        clearQueue[clearCount++] = (ClearRect){ x, y, w, h };
+    } else {
+        // Too many clears this frame; safest is to request a full redraw next frame.
+        fullRedrawRequested = 1;
+        clearCount = 0;
+    }
+}
+
+// Forward decl because it uses drawRectPlayfield(...)
+static void flushClears(void);
+
+// Draw a rectangle clipped to the gameplay area (below HUD) and screen bounds.
+// This prevents erasing HUD pixels while also avoiding off-screen "crumbs".
 static void drawRectPlayfield(int x, int y, int w, int h, volatile unsigned short color) {
     if (w <= 0 || h <= 0) return;
 
-    // Disallow drawing into the HUD strip at the top of the screen
-    if (y < HUD_HEIGHT) return;
+    // Clip against HUD strip first (keep everything below HUD_HEIGHT)
+    if (y < HUD_HEIGHT) {
+        int cut = HUD_HEIGHT - y;
+        y = HUD_HEIGHT;
+        h -= cut;
+    }
+    if (h <= 0) return;
 
-    // Match drawRectangle's bounds contract (must be fully on-screen)
-    if (x < 0 || y < 0 || x + w > SCREENWIDTH || y + h > SCREENHEIGHT) return;
+    drawRectangleClipped(x, y, w, h, (u16)color);
+}
 
-    drawRectangle(x, y, w, h, color);
+static void fillPlayfield(u16 color) {
+    // fill from HUD_HEIGHT down to SCREENHEIGHT
+    for (int row = HUD_HEIGHT; row < SCREENHEIGHT; row++) {
+        volatile u16* dest = &videoBuffer[OFFSET(0, row, SCREENWIDTH)];
+        DMANow(3, &color, dest, SCREENWIDTH | DMA_SOURCE_FIXED | DMA_16);
+    }
+}
+
+static void flushClears(void) {
+    for (int i = 0; i < clearCount; i++) {
+        drawRectPlayfield(clearQueue[i].x, clearQueue[i].y,
+                          clearQueue[i].w, clearQueue[i].h, BLACK);
+    }
+    clearCount = 0;
 }
 
 // Public API
@@ -138,10 +185,10 @@ void updateGame(void) {
                 if (newlyPressed & BUTTON_B) {
                     for (int i = 0; i < MAX_ASTEROIDS; i++) {
                         if (asteroids[i].active) {
-                            drawRectPlayfield(asteroids[i].oldx, asteroids[i].oldy,
-                                            asteroids[i].size, asteroids[i].size, BLACK);
-                            drawRectPlayfield(asteroids[i].x, asteroids[i].y,
-                                            asteroids[i].size, asteroids[i].size, BLACK);
+                            queueClear(asteroids[i].oldx, asteroids[i].oldy,
+                                    asteroids[i].size, asteroids[i].size);
+                            queueClear(asteroids[i].x, asteroids[i].y,
+                                    asteroids[i].size, asteroids[i].size);
                             asteroids[i].active = 0;
                         }
                     }
@@ -298,16 +345,17 @@ void drawGame(void) {
         fillScreen(BLACK);
 
         if (state == STATE_START) {
-            drawString(60, 70, "ASTRO SWEEP", CYAN);
-            drawString(28, 92, "Press START to begin", WHITE);
-            drawString(22, 110, "A: Shoot  B: Dash  L: Bomb", GRAY);
-            drawString(14, 122, "Shoot MAGENTA asteroid to earn bomb", GRAY);
+            drawString(90, 70, "ASTRO SWEEP", CYAN);
+            drawString(20, 90, "Press START to begin", WHITE);
+            drawString(20, 100, "Earn 25 points to win", WHITE);
+            drawString(20, 110, "A: Shoot  B: Dash  L: Bomb", GRAY);
+            drawString(20, 120, "Shoot MAGENTA asteroid to earn bomb", GRAY);
         } else if (state == STATE_WIN) {
-            drawString(80, 70, "YOU WIN!", GREEN);
-            drawString(34, 92, "Press START for menu", WHITE);
+            drawString(100, 70, "YOU WIN!", GREEN);
+            drawString(60, 90, "Press START for menu", WHITE);
         } else if (state == STATE_LOSE) {
-            drawString(80, 70, "YOU LOSE!", RED);
-            drawString(34, 92, "Press START for menu", WHITE);
+            drawString(100, 70, "YOU LOSE!", RED);
+            drawString(60, 90, "Press START for menu", WHITE);
         }
         return;
     }
@@ -336,14 +384,11 @@ void drawGame(void) {
     }
 
     if (fullRedrawRequested) {
-        fillScreen(BLACK);
-
-        // If we cleared the screen, the HUD must be redrawn too.
-        hudDirty = 1;
-
+        fillPlayfield(BLACK);
+        hudDirty = 1;         
         fullRedrawRequested = 0;
     }
-
+    flushClears();
     drawStars();
     drawPlayer();
     drawBullets();
@@ -581,7 +626,7 @@ static void updateBullets(void) {
         if (bullets[i].y < HUD_HEIGHT) {
             bullets[i].active = 0;
             // erase bullet so it doesn't leave a trail (only if in playfield)
-            drawRectPlayfield(bullets[i].oldx, bullets[i].oldy, bullets[i].w, bullets[i].h, BLACK);
+            queueClear(bullets[i].oldx, bullets[i].oldy, bullets[i].w, bullets[i].h);
             continue;
         }
 
@@ -589,7 +634,7 @@ static void updateBullets(void) {
         if (bullets[i].y < 0) {
             bullets[i].active = 0;
             // erase bullet so it doesn't leave a trail (only if in playfield)
-            drawRectPlayfield(bullets[i].oldx, bullets[i].oldy, bullets[i].w, bullets[i].h, BLACK);
+            queueClear(bullets[i].oldx, bullets[i].oldy, bullets[i].w, bullets[i].h);
         }
     }
 }
@@ -667,8 +712,8 @@ static void updateAsteroids(void) {
         // If it moved fully past the bottom, erase the LAST drawn rect and recycle
         if (asteroids[i].oldy < SCREENHEIGHT && asteroids[i].y >= SCREENHEIGHT) {
             // Clear where it was last frame (this is the one that matters)
-            drawRectPlayfield(asteroids[i].oldx, asteroids[i].oldy,
-                              asteroids[i].size, asteroids[i].size, BLACK);
+            queueClear(asteroids[i].oldx, asteroids[i].oldy,
+                    asteroids[i].size, asteroids[i].size);
             asteroids[i].active = 0;
         }
     }
@@ -709,18 +754,18 @@ static void handleCollisions(void) {
 
                 // Bullet returns to pool
                 bullets[b].active = 0;
-                drawRectPlayfield(bullets[b].oldx, bullets[b].oldy, bullets[b].w, bullets[b].h, BLACK);
+                queueClear(bullets[b].oldx, bullets[b].oldy, bullets[b].w, bullets[b].h);
 
                 // Asteroid takes damage
                 asteroids[a].hp--;
                 if (asteroids[a].hp <= 0) {
 
                     // Clear BOTH old and current positions (only in playfield)
-                    drawRectPlayfield(asteroids[a].oldx, asteroids[a].oldy,
-                                      asteroids[a].size, asteroids[a].size, BLACK);
+                    queueClear(asteroids[a].oldx, asteroids[a].oldy,
+                                      asteroids[a].size, asteroids[a].size);
 
-                    drawRectPlayfield(asteroids[a].x, asteroids[a].y,
-                                      asteroids[a].size, asteroids[a].size, BLACK);
+                    queueClear(asteroids[a].x, asteroids[a].y,
+                                      asteroids[a].size, asteroids[a].size);
 
                     asteroids[a].active = 0;
 
@@ -757,12 +802,12 @@ static void handleCollisions(void) {
                 // Ensure HUD redraws (lives changed)
                 hudDirty = 1;
 
-                // Remove asteroid on hit (makes collision “matter”)
-                drawRectPlayfield(asteroids[a].oldx, asteroids[a].oldy,
-                                  asteroids[a].size, asteroids[a].size, BLACK);
+                // Remove asteroid on hit (queue clears; do NOT draw in update)
+                queueClear(asteroids[a].oldx, asteroids[a].oldy,
+                        asteroids[a].size, asteroids[a].size);
 
-                drawRectPlayfield(asteroids[a].x, asteroids[a].y,
-                                  asteroids[a].size, asteroids[a].size, BLACK);
+                queueClear(asteroids[a].x, asteroids[a].y,
+                        asteroids[a].size, asteroids[a].size);
 
                 asteroids[a].active = 0;
                 sfxHit();
@@ -787,11 +832,11 @@ static void useBomb(void) {
     int cleared = 0;
     for (int i = 0; i < MAX_ASTEROIDS; i++) {
         if (asteroids[i].active) {
-            // Erase both old + current to avoid leftovers
-            drawRectPlayfield(asteroids[i].oldx, asteroids[i].oldy,
-                              asteroids[i].size, asteroids[i].size, BLACK);
-            drawRectPlayfield(asteroids[i].x, asteroids[i].y,
-                              asteroids[i].size, asteroids[i].size, BLACK);
+            // Queue clears; don't draw in update
+            queueClear(asteroids[i].oldx, asteroids[i].oldy,
+                    asteroids[i].size, asteroids[i].size);
+            queueClear(asteroids[i].x, asteroids[i].y,
+                    asteroids[i].size, asteroids[i].size);
             asteroids[i].active = 0;
             cleared++;
         }
