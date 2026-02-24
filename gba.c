@@ -18,21 +18,37 @@
 u16* videoBuffer = (u16*)0x6000000;
 
 // Faster drawRect function: DMA one scanline per row
-void drawRectangle(int x, int y, int width, int height, volatile unsigned short color) {
+void drawRectangleClipped(int x, int y, int width, int height, u16 color) {
     if (width <= 0 || height <= 0) return;
 
-    // Bounds guard (prevents writing outside VRAM)
-    if (x < 0 || y < 0 || x + width > SCREENWIDTH || y + height > SCREENHEIGHT) return;
-
-    for (int row = 0; row < height; row++) {
-        volatile unsigned short* dest =
-            (volatile unsigned short*)&videoBuffer[OFFSET(x, y + row, SCREENWIDTH)];
-
-        DMANow(3,
-               (volatile void*)&color,
-               (volatile void*)dest,
-               width | DMA_SOURCE_FIXED | DMA_DESTINATION_INCREMENT | DMA_16);
+    // --- Clip to screen bounds ---
+    // Clip left
+    if (x < 0) {
+        width += x;  // x is negative, so this shrinks width
+        x = 0;
     }
+    // Clip top
+    if (y < 0) {
+        height += y;
+        y = 0;
+    }
+
+    // Clip right/bottom
+    if (x + width > SCREENWIDTH)  width = SCREENWIDTH - x;
+    if (y + height > SCREENHEIGHT) height = SCREENHEIGHT - y;
+
+    if (width <= 0 || height <= 0) return;
+
+    // DMA each row
+    for (int row = 0; row < height; row++) {
+        volatile u16* dest = (volatile u16*)&videoBuffer[OFFSET(x, y + row, SCREENWIDTH)];
+        DMANow(3, &color, dest, width | DMA_SOURCE_FIXED | DMA_16);
+    }
+}
+
+// Keep drawRectangle for compatibility, but make it safe (clipped)
+void drawRectangle(int x, int y, int width, int height, volatile unsigned short color) {
+    drawRectangleClipped(x, y, width, height, (u16)color);
 }
 
 // Faster fill screen function: DMA fixed-source color across full VRAM buffer

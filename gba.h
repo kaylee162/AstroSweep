@@ -63,6 +63,7 @@ extern int hudClipEnabled;
 #define setPixel(x, y, color) (videoBuffer[OFFSET(x, y, SCREENWIDTH)] = color)
 void drawRectangle(int x, int y, int width, int height, volatile unsigned short color);
 void fillScreen(volatile unsigned short color);
+void drawRectangleClipped(int x, int y, int width, int height, u16 color);
 
 // Minimal font text
 void drawChar(int x, int y, char ch, u16 color);
