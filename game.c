@@ -6,7 +6,7 @@ static GameState state;
 
 static Player player;
 
-static Bullet bullets[MAX_BULLETS];       // object pool (meaningful pooling requirement)
+static Bullet bullets[MAX_BULLETS];       // object pool
 static Asteroid asteroids[MAX_ASTEROIDS]; // object pool
 static Star stars[MAX_STARS];             // just for background motion (array + extra polish)
 
@@ -41,11 +41,10 @@ static void drawAsteroids(void);
 static void handleCollisions(void);
 static void useBomb(void);
 
-// --- Debug cheat latch (makes combos reliable even with weird timing) ---
+// Debug cheat latch (makes combos reliable even with weird timing)
 static u16 cheatLatch = 0;
 static int cheatFlashTimer = 0; // quick visual confirmation
 
-// Tracks which state screen we last fully rendered.
 // Prevents re-drawing heavy text screens every frame (reduces flicker).
 static GameState lastRenderedState = -1;
 static int fullRedrawRequested = 1;   // full redraw once when entering gameplay
@@ -63,11 +62,9 @@ static void cheatFlash(void) {
     cheatFlashTimer = 10; // 10 frames
 }
 
-// ---------------------------------------------------------------------------
 // Clear queue: update logic NEVER draws.
 // When something deactivates (bullet/asteroid), we queue the old rect to clear
 // and then flush clears during drawGame() (which happens after waitForVBlank()).
-// ---------------------------------------------------------------------------
 #define MAX_CLEARS 64
 
 typedef struct {
@@ -159,15 +156,12 @@ void updateGame(void) {
             break;
 
         case STATE_GAME: {
-            // -----------------------------
-            // Debug cheats (hold SELECT)
-            // Reliable + prevents gameplay input from stealing A/B/etc
-            // -----------------------------
+            // Debug cheats (hold SELECT + a cheat key)
             if (BUTTON_HELD(BUTTON_SELECT)) {
                 // Convert to "pressed = 1" bitmask (since buttons are active-low)
                 u16 pressedNow = (u16)(~buttons);
 
-                // Use these keys for cheats (choose any you want)
+                // Use these keys for cheats 
                 u16 cheatKeys = (BUTTON_START | BUTTON_A | BUTTON_B | BUTTON_LEFT | BUTTON_RIGHT | BUTTON_UP);
 
                 // Current held cheat keys while SELECT is held
@@ -261,6 +255,7 @@ void updateGame(void) {
                 spawnTimer = clamp(60 - (frameCount / 240), 18, 60);
             }
 
+            // Update asteroids and handle collisions
             updateAsteroids();
             handleCollisions();
 
@@ -332,7 +327,7 @@ static void drawHUD(void) {
     hud[idx++] = (char)('0' + (pointsShown % 10));
     hud[idx++] = ' ';
 
-    // B: bomb available (0/1)
+    // B: bomb available (NOTE: only one at a time (0/1))
     hud[idx++] = 'B';
     hud[idx++] = ':';
     hud[idx++] = (char)('0' + bombsShown);
@@ -343,9 +338,7 @@ static void drawHUD(void) {
 
 void drawGame(void) {
 
-    // ------------------------------------------------------------
     // 1) START / WIN / LOSE: draw once on state change (no HUD)
-    // ------------------------------------------------------------
     if (state == STATE_START || state == STATE_WIN || state == STATE_LOSE) {
         if (state == lastRenderedState) {
             return;
@@ -355,24 +348,25 @@ void drawGame(void) {
         fillScreen(BLACK);
 
         if (state == STATE_START) {
+            // Draw the starting text
             drawString(90, 70, "ASTRO SWEEP", CYAN);
             drawString(20, 90, "Press START to begin", WHITE);
             drawString(20, 100, "Earn 25 points to win", WHITE);
             drawString(20, 110, "A: Shoot  B: Dash  L: Bomb", GRAY);
             drawString(20, 120, "Shoot MAGENTA asteroid to earn bomb", GRAY);
         } else if (state == STATE_WIN) {
+            // Draw the win state text
             drawString(100, 70, "YOU WIN!", GREEN);
             drawString(60, 90, "Press START for menu", WHITE);
         } else if (state == STATE_LOSE) {
+            // Draw the lose state text
             drawString(100, 70, "YOU LOSE!", RED);
             drawString(60, 90, "Press START for menu", WHITE);
         }
         return;
     }
 
-    // ------------------------------------------------------------
     // 2) PAUSE: draw once on entry, then wait
-    // ------------------------------------------------------------
     if (state == STATE_PAUSE) {
         if (state != lastRenderedState) {
             lastRenderedState = state;
@@ -384,9 +378,7 @@ void drawGame(void) {
         return;
     }
 
-    // ------------------------------------------------------------
     // 3) GAME: normal rendering (HUD always last)
-    // ------------------------------------------------------------
     if (state != lastRenderedState) {
         lastRenderedState = state;
         fullRedrawRequested = 1;
@@ -447,17 +439,20 @@ void goToPause(void) {
     hudDirty = 1;
 }
 
+// Go to Win
 void goToWin(void) {
     state = STATE_WIN;
     sfxWin();
 }
 
+// Go to Lose
 void goToLose(void) {
     state = STATE_LOSE;
     sfxLose();
 }
 
 // Stars (background polish)
+// Initialize the starts
 static void initStars(void) {
     for (int i = 0; i < MAX_STARS; i++) {
         stars[i].x = (i * 13) % SCREENWIDTH;
@@ -468,6 +463,7 @@ static void initStars(void) {
     }
 }
 
+// Update the stars 
 static void updateStars(void) {
     for (int i = 0; i < MAX_STARS; i++) {
         stars[i].oldx = stars[i].x;
@@ -484,6 +480,7 @@ static void updateStars(void) {
     }
 }
 
+// Draw stars function
 static void drawStars(void) {
     for (int i = 0; i < MAX_STARS; i++) {
 
@@ -502,6 +499,7 @@ static void drawStars(void) {
 }
 
 // Player
+// Initialize the player
 static void initPlayer(void) {
     player.w = PLAYER_W;
     player.h = PLAYER_H;
@@ -519,6 +517,7 @@ static void initPlayer(void) {
     player.bombs = 0;
 }
 
+// Update player
 static void updatePlayer(void) {
     player.oldx = player.x;
     player.oldy = player.y;
@@ -564,6 +563,7 @@ static void updatePlayer(void) {
     }
 }
 
+// Draw player function
 static void drawPlayer(void) {
     // Erase old player rectangle
     drawRectangle(player.oldx, player.oldy, player.w, player.h, BLACK);
@@ -581,8 +581,9 @@ static void drawPlayer(void) {
     safeSetPixel(player.x + 3, player.y + 2, WHITE);
 }
 
-// Bullets (object pool)
+// Initialize object pools
 static void initPools(void) {
+    // Bullet pool
     for (int i = 0; i < MAX_BULLETS; i++) {
         bullets[i].active = 0;
         bullets[i].w = 2;
@@ -593,6 +594,7 @@ static void initPools(void) {
         bullets[i].dy = -4;
     }
 
+    // Asteroid pool
     for (int i = 0; i < MAX_ASTEROIDS; i++) {
         asteroids[i].active = 0;
         asteroids[i].size = 8;
@@ -623,6 +625,7 @@ static void fireBullet(void) {
     // If pool is full, do nothing (meaningful pooling)
 }
 
+// Update bullet function
 static void updateBullets(void) {
     for (int i = 0; i < MAX_BULLETS; i++) {
         if (!bullets[i].active) continue;
@@ -649,6 +652,7 @@ static void updateBullets(void) {
     }
 }
 
+// Draw bullet function
 static void drawBullets(void) {
     for (int i = 0; i < MAX_BULLETS; i++) {
         if (!bullets[i].active) continue;
@@ -705,6 +709,7 @@ static void spawnAsteroid(void) {
     // Pool full: no spawn (again, intentional)
 }
 
+// Update asteroids function
 static void updateAsteroids(void) {
     for (int i = 0; i < MAX_ASTEROIDS; i++) {
         if (!asteroids[i].active) continue;
@@ -739,6 +744,7 @@ static void safeSetPixel(int x, int y, u16 color) {
     }
 }
 
+// Draw asteroids function
 static void drawAsteroids(void) {
     for (int i = 0; i < MAX_ASTEROIDS; i++) {
         if (!asteroids[i].active) continue;
@@ -756,7 +762,7 @@ static void drawAsteroids(void) {
     }
 }
 
-// Collisions + bomb
+// Collisions and bomb
 static void handleCollisions(void) {
     // Bullet vs Asteroid
     for (int b = 0; b < MAX_BULLETS; b++) {

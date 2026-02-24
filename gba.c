@@ -1,19 +1,6 @@
 #include "gba.h"
 #include "font.h"
 
-// ---------------------------------------------------------------------------
-// Mode 3 + DMA drawing (Lab 5 style)
-//
-// Your build links most globals into IWRAM (32KB). A full 240x160 shadow
-// framebuffer is ~76KB, which overflows IWRAM and fails to link.
-//
-// So instead of a RAM backbuffer, we draw directly to VRAM, but:
-//   1) we wait for VBlank before drawing, and
-//   2) we use DMA for large fills/rectangles
-//
-// This reduces flicker/tearing without changing any game logic.
-// ---------------------------------------------------------------------------
-
 // Pointer to Mode 3 VRAM framebuffer
 u16* videoBuffer = (u16*)0x6000000;
 
@@ -21,7 +8,7 @@ u16* videoBuffer = (u16*)0x6000000;
 void drawRectangleClipped(int x, int y, int width, int height, u16 color) {
     if (width <= 0 || height <= 0) return;
 
-    // --- Clip to screen bounds ---
+    // Clip to screen bounds 
     // Clip left
     if (x < 0) {
         width += x;  // x is negative, so this shrinks width
@@ -95,12 +82,6 @@ void drawString(int x, int y, const char* str, u16 color) {
 void waitForVBlank() {
     while (REG_VCOUNT >= 160);
     while (REG_VCOUNT < 160);
-}
-
-// No backbuffer in this approach, so nothing to flip.
-// Kept so your project structure doesn't change.
-void flipBuffer(void) {
-    // no-op
 }
 
 // Axis-aligned rectangle collision

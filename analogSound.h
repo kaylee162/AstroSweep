@@ -23,7 +23,6 @@ Master Sound Control Register
 
 
 // ## Flags:
-
 // This bit must be set in REG_SOUNDCNT_X to hear anything at all from the GBA
 #define SND_ENABLED  (1<<7)
 
@@ -348,7 +347,7 @@ void playAnalogSound(u16 sound);
 // Simple Channel 2 tone (no sweep, good for layering variety)
 void playChannel2(u16 note, u8 length, u8 envStepTime, u8 envDir, u8 duty);
 
-// “Safe” preset SFX (small set of notes, easy to keep consistent)
+// Preset SFX (small set of notes, easy to keep consistent)
 typedef enum {
     SFXP_SHOOT = 0,
     SFXP_HIT,

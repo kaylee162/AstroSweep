@@ -6,7 +6,7 @@
 // Call once at program start
 void sfxInit(void);
 
-// Two+ sound effects (shoot + hit + optional win/lose stingers)
+// Sound effects
 void sfxShoot(void);
 void sfxHit(void);
 void sfxBomb(void);

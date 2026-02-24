@@ -3,6 +3,7 @@
 
 void sfxInit(void) { initSound(); }
 
+// Sound functions 
 void sfxShoot(void)   { playSfxPreset(SFXP_SHOOT); }
 void sfxHit(void)     { playSfxPreset(SFXP_HIT); }
 void sfxBomb(void)    { playSfxPreset(SFXP_BOMB); }

@@ -11,6 +11,7 @@
 #define PLAYER_W 8
 #define PLAYER_H 8
 
+// Gamestates
 typedef enum {
     STATE_START,
     STATE_GAME,
